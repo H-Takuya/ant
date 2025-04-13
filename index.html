@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>アリの巣シミュレーター（プロトタイプ）</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1a1a1a;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: #2a2a2a;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="antCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("antCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const numAnts = 30;
+    const ants = [];
+    const food = { x: canvas.width * 0.8, y: canvas.height * 0.8, radius: 8 };
+    const nest = { x: canvas.width * 0.2, y: canvas.height * 0.2, radius: 12 };
+
+    for (let i = 0; i < numAnts; i++) {
+      ants.push({
+        x: nest.x,
+        y: nest.y,
+        angle: Math.random() * Math.PI * 2,
+        carrying: false
+      });
+    }
+
+    function updateAnts() {
+      ants.forEach(ant => {
+        // ランダムウォーク
+        ant.angle += (Math.random() - 0.5) * 0.3;
+        ant.x += Math.cos(ant.angle) * 1.5;
+        ant.y += Math.sin(ant.angle) * 1.5;
+
+        // 食料に接触したら拾う
+        if (!ant.carrying) {
+          const dx = food.x - ant.x;
+          const dy = food.y - ant.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < food.radius + 2) {
+            ant.carrying = true;
+            ant.angle += Math.PI; // 方向転換
+          }
+        } else {
+          // 巣に戻る
+          const dx = nest.x - ant.x;
+          const dy = nest.y - ant.y;
+          ant.angle = Math.atan2(dy, dx);
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < nest.radius + 2) {
+            ant.carrying = false;
+            ant.angle += Math.PI;
+          }
+        }
+      });
+    }
+
+    function draw() {
+      ctx.fillStyle = "#2a2a2a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 巣
+      ctx.beginPath();
+      ctx.arc(nest.x, nest.y, nest.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#888";
+      ctx.fill();
+
+      // 食料
+      ctx.beginPath();
+      ctx.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#0f0";
+      ctx.fill();
+
+      // アリ
+      ants.forEach(ant => {
+        ctx.beginPath();
+        ctx.arc(ant.x, ant.y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = ant.carrying ? "#ff0" : "#fff";
+        ctx.fill();
+      });
+    }
+
+    function animate() {
+      updateAnts();
+      draw();
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
