@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>アリの巣シミュレーター（新設計）</title>
+  <title>アリの巣シミュレーター（フェロモン付き）</title>
   <style>
     body {
       margin: 0;
@@ -27,6 +27,7 @@
     const ants = [];
     const tunnels = [];
     const rooms = [];
+    const pheromones = [];
     const foods = [{ x: canvas.width * 0.5, y: surfaceHeight * 0.5, radius: 6 }];
 
     const queen = {
@@ -45,6 +46,17 @@
       });
     }
 
+    function leavePheromone(x, y) {
+      pheromones.push({ x, y, strength: 1.0 });
+    }
+
+    function updatePheromones() {
+      pheromones.forEach(p => p.strength *= 0.98);
+      for (let i = pheromones.length - 1; i >= 0; i--) {
+        if (pheromones[i].strength < 0.05) pheromones.splice(i, 1);
+      }
+    }
+
     function updateQueen() {
       queen.layTimer--;
       if (queen.layTimer <= 0) {
@@ -56,14 +68,35 @@
     function updateAnts() {
       ants.forEach(ant => {
         if (ant.state === "explore") {
-          ant.angle += (Math.random() - 0.5) * 0.2;
+          // フェロモンの匂いを感じる
+          let bestPheromone = null;
+          for (let p of pheromones) {
+            const dx = p.x - ant.x;
+            const dy = p.y - ant.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 50 && Math.random() < p.strength) {
+              bestPheromone = p;
+              break;
+            }
+          }
+          if (bestPheromone) {
+            ant.angle = Math.atan2(bestPheromone.y - ant.y, bestPheromone.x - ant.x);
+          } else {
+            ant.angle += (Math.random() - 0.5) * 0.2;
+          }
+
           ant.x += Math.cos(ant.angle) * 1;
           ant.y += Math.sin(ant.angle) * 1;
           if (ant.y < surfaceHeight + 20) ant.y = surfaceHeight + 20;
 
-          // 掘削（新トンネル）
+          // 掘削
           if (Math.random() < 0.005) {
-            tunnels.push({ x1: ant.x, y1: ant.y, x2: ant.x + Math.cos(ant.angle) * 10, y2: ant.y + Math.sin(ant.angle) * 10 });
+            tunnels.push({
+              x1: ant.x,
+              y1: ant.y,
+              x2: ant.x + Math.cos(ant.angle) * 10,
+              y2: ant.y + Math.sin(ant.angle) * 10
+            });
           }
 
           // 食料発見
@@ -83,6 +116,9 @@
           ant.angle = Math.atan2(dy, dx);
           ant.x += Math.cos(ant.angle) * 1.5;
           ant.y += Math.sin(ant.angle) * 1.5;
+
+          leavePheromone(ant.x, ant.y);
+
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 10) {
             ant.carrying = false;
@@ -108,6 +144,22 @@
         ctx.moveTo(t.x1, t.y1);
         ctx.lineTo(t.x2, t.y2);
         ctx.stroke();
+      });
+
+      // 部屋（オプション）
+      rooms.forEach(r => {
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#3a2a1c";
+        ctx.fill();
+      });
+
+      // フェロモン
+      pheromones.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0,255,255,${p.strength})`;
+        ctx.fill();
       });
 
       // 食料
@@ -136,6 +188,7 @@
     function animate() {
       updateQueen();
       updateAnts();
+      updatePheromones();
       draw();
       requestAnimationFrame(animate);
     }
@@ -145,3 +198,4 @@
   </script>
 </body>
 </html>
+
