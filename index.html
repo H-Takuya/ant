@@ -67,9 +67,9 @@
     function hatchEggs() {
       for (let i = eggs.length - 1; i >= 0; i--) {
         eggs[i].age++;
-        if (eggs[i].age > 100 && eggs[i].stage === 'egg') eggs[i].stage = 'larva';
-        if (eggs[i].age > 200 && eggs[i].stage === 'larva') eggs[i].stage = 'pupa';
-        if (eggs[i].age > 300 && eggs[i].stage === 'pupa') {
+        if (eggs[i].age > 50 && eggs[i].stage === 'egg') eggs[i].stage = 'larva';
+        if (eggs[i].age > 100 && eggs[i].stage === 'larva') eggs[i].stage = 'pupa';
+        if (eggs[i].age > 150 && eggs[i].stage === 'pupa') {
           const angle = Math.random() * Math.PI * 2;
           const isSoldier = Math.random() < 0.2;
           ants.push({
@@ -221,7 +221,7 @@
       if (queen.eggTimer <= 0 && foodStock > 0) {
         spawnEgg();
         foodStock--;
-        queen.eggTimer = 300 + Math.floor(Math.random() * 100);
+        queen.eggTimer = 80 + Math.floor(Math.random() * 20);
       }
       requestAnimationFrame(animate);
     }
