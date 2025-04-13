@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>アリの巣シミュレーター（女王・巣拡張モデル）</title>
+  <title>アリの巣シミュレーター（発展型）</title>
   <style>
     body {
       margin: 0;
@@ -29,8 +29,18 @@
     let ants = [];
     let eggs = [];
     let foodSources = [{ x: canvas.width * 0.7, y: surfaceHeight - 10, radius: 8 }];
-    let tunnels = [];
-    let foodStock = 0;
+    let foodStock = 5;
+    let pheromoneMap = [];
+    const cellSize = 10;
+
+    const cols = Math.floor(canvas.width / cellSize);
+    const rows = Math.floor(canvas.height / cellSize);
+    for (let y = 0; y < rows; y++) {
+      pheromoneMap[y] = [];
+      for (let x = 0; x < cols; x++) {
+        pheromoneMap[y][x] = 0;
+      }
+    }
 
     const ANT_TYPES = {
       WORKER: 'worker',
@@ -38,7 +48,6 @@
       QUEEN: 'queen'
     };
 
-    // 女王アリ
     const queen = {
       x: nestCenter.x,
       y: nestCenter.y,
@@ -51,7 +60,7 @@
         x: queen.x + Math.random() * 10 - 5,
         y: queen.y + Math.random() * 10 - 5,
         age: 0,
-        stage: 'egg' // egg -> larva -> pupa -> adult
+        stage: 'egg'
       });
     }
 
@@ -76,10 +85,48 @@
       }
     }
 
+    function leavePheromone(x, y) {
+      const cx = Math.floor(x / cellSize);
+      const cy = Math.floor(y / cellSize);
+      if (pheromoneMap[cy] && pheromoneMap[cy][cx] !== undefined) {
+        pheromoneMap[cy][cx] = Math.min(1, pheromoneMap[cy][cx] + 0.2);
+      }
+    }
+
+    function evaporatePheromones() {
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          pheromoneMap[y][x] *= 0.98;
+        }
+      }
+    }
+
+    function getPheromoneGradient(x, y) {
+      const cx = Math.floor(x / cellSize);
+      const cy = Math.floor(y / cellSize);
+      let maxVal = 0;
+      let bestAngle = null;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = cx + dx;
+          const ny = cy + dy;
+          if (pheromoneMap[ny] && pheromoneMap[ny][nx] !== undefined) {
+            const val = pheromoneMap[ny][nx];
+            if (val > maxVal) {
+              maxVal = val;
+              bestAngle = Math.atan2(dy, dx);
+            }
+          }
+        }
+      }
+      return bestAngle;
+    }
+
     function updateAnts() {
       ants.forEach(ant => {
         if (ant.type === ANT_TYPES.WORKER) {
           if (ant.carrying) {
+            leavePheromone(ant.x, ant.y);
             const dx = nestCenter.x - ant.x;
             const dy = nestCenter.y - ant.y;
             ant.angle = Math.atan2(dy, dx);
@@ -92,6 +139,10 @@
               ant.angle += Math.random() * Math.PI;
             }
           } else {
+            const grad = getPheromoneGradient(ant.x, ant.y);
+            if (grad !== null) {
+              ant.angle = grad + (Math.random() - 0.5) * 0.2;
+            }
             for (let f of foodSources) {
               const dx = f.x - ant.x;
               const dy = f.y - ant.y;
@@ -103,10 +154,9 @@
             }
             ant.x += Math.cos(ant.angle) * 1.5;
             ant.y += Math.sin(ant.angle) * 1.5;
-            ant.angle += (Math.random() - 0.5) * 0.2;
+            ant.angle += (Math.random() - 0.5) * 0.1;
           }
         } else if (ant.type === ANT_TYPES.SOLDIER) {
-          // 巣の周囲をうろつく（防衛行動のイメージ）
           const radius = 50 + Math.random() * 30;
           ant.angle += (Math.random() - 0.5) * 0.1;
           ant.x = nestCenter.x + Math.cos(ant.angle) * radius;
@@ -121,17 +171,16 @@
       ctx.fillStyle = "#665544";
       ctx.fillRect(0, 0, canvas.width, surfaceHeight);
 
-      // トンネル（未拡張）
-      ctx.strokeStyle = "#4a3c2f";
-      ctx.lineWidth = 2;
-      tunnels.forEach(t => {
-        ctx.beginPath();
-        ctx.moveTo(t.x1, t.y1);
-        ctx.lineTo(t.x2, t.y2);
-        ctx.stroke();
-      });
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const val = pheromoneMap[y][x];
+          if (val > 0.01) {
+            ctx.fillStyle = `rgba(0,255,0,${val * 0.4})`;
+            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+          }
+        }
+      }
 
-      // 食料
       foodSources.forEach(f => {
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
@@ -139,13 +188,11 @@
         ctx.fill();
       });
 
-      // 女王アリ
       ctx.beginPath();
       ctx.arc(queen.x, queen.y, 6, 0, Math.PI * 2);
       ctx.fillStyle = "#f0c";
       ctx.fill();
 
-      // 卵・幼虫など
       eggs.forEach(e => {
         ctx.beginPath();
         ctx.arc(e.x, e.y, 2, 0, Math.PI * 2);
@@ -153,7 +200,6 @@
         ctx.fill();
       });
 
-      // 働きアリ・兵隊アリ
       ants.forEach(a => {
         ctx.beginPath();
         ctx.arc(a.x, a.y, 2, 0, Math.PI * 2);
@@ -161,7 +207,6 @@
         ctx.fill();
       });
 
-      // 食料ストック
       ctx.fillStyle = "#fff";
       ctx.font = "14px sans-serif";
       ctx.fillText("食料: " + foodStock, 20, 20);
@@ -170,6 +215,7 @@
     function animate() {
       hatchEggs();
       updateAnts();
+      evaporatePheromones();
       draw();
       queen.eggTimer--;
       if (queen.eggTimer <= 0 && foodStock > 0) {
