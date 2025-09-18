@@ -61,6 +61,8 @@
       maxFoodSources: 4,
       expansionBaseCost: 12,
       expansionCostGrowth: 6,
+      trailMaxPoints: 480,
+      trailRecordDistance: 4,
     });
 
     const VISUAL = Object.freeze({
@@ -131,6 +133,9 @@
         state: "explore",
         carrying: false,
         cargo: 0,
+        trail: [{ x, y }],
+        trailLastRecord: { x, y },
+        pathIndex: -1,
       });
     }
 
@@ -249,6 +254,21 @@
           if (ant.x > maxX) ant.x = maxX;
           if (ant.y > maxY) ant.y = maxY;
 
+          if (ant.trail.length === 0 || !ant.trailLastRecord) {
+            ant.trail.push({ x: ant.x, y: ant.y });
+            ant.trailLastRecord = { x: ant.x, y: ant.y };
+          } else {
+            const trailDx = ant.x - ant.trailLastRecord.x;
+            const trailDy = ant.y - ant.trailLastRecord.y;
+            if (Math.hypot(trailDx, trailDy) >= CONFIG.trailRecordDistance) {
+              ant.trail.push({ x: ant.x, y: ant.y });
+              ant.trailLastRecord = { x: ant.x, y: ant.y };
+              if (ant.trail.length > CONFIG.trailMaxPoints) {
+                ant.trail.shift();
+              }
+            }
+          }
+
           if (Math.random() < 0.002) {
             const length = 12 + Math.random() * 18;
             const angle = ant.angle + (Math.random() - 0.5) * 0.5;
@@ -271,6 +291,7 @@
               ant.carrying = true;
               ant.cargo = 1;
               ant.state = "return";
+              ant.pathIndex = ant.trail.length - 1;
               f.amount--;
               if (f.amount <= 0) {
                 foods.splice(i, 1);
@@ -279,24 +300,48 @@
             }
           }
         } else {
-          const dx = queen.x - ant.x;
-          const dy = queen.y - ant.y;
+          let targetX = queen.x;
+          let targetY = queen.y;
+
+          if (ant.pathIndex >= 0 && ant.pathIndex < ant.trail.length) {
+            const waypoint = ant.trail[ant.pathIndex];
+            targetX = waypoint.x;
+            targetY = waypoint.y;
+          }
+
+          const dx = targetX - ant.x;
+          const dy = targetY - ant.y;
+          const dist = Math.hypot(dx, dy) || 1;
           ant.angle = Math.atan2(dy, dx);
-          ant.x += Math.cos(ant.angle) * CONFIG.returnSpeed;
-          ant.y += Math.sin(ant.angle) * CONFIG.returnSpeed;
+          ant.x += (dx / dist) * CONFIG.returnSpeed;
+          ant.y += (dy / dist) * CONFIG.returnSpeed;
+
+          if (ant.x < minX) ant.x = minX;
+          if (ant.x > maxX) ant.x = maxX;
+          if (ant.y < minY) ant.y = minY;
+          if (ant.y > maxY) ant.y = maxY;
 
           if (Math.random() < CONFIG.pheromoneDropChance) {
             dropPheromone(ant.x, ant.y);
           }
 
-          const dist = Math.hypot(dx, dy);
-          if (dist < 12) {
-            ant.carrying = false;
-            colony.foodBank += ant.cargo;
-            colony.expansionProgress += ant.cargo;
-            ant.cargo = 0;
-            ant.state = "explore";
-            maybeExpandNest();
+          if (ant.pathIndex >= 0 && dist < CONFIG.trailRecordDistance * 1.5) {
+            ant.pathIndex--;
+          }
+
+          if (ant.pathIndex < 0) {
+            const distToQueen = Math.hypot(queen.x - ant.x, queen.y - ant.y);
+            if (distToQueen < 12) {
+              ant.carrying = false;
+              colony.foodBank += ant.cargo;
+              colony.expansionProgress += ant.cargo;
+              ant.cargo = 0;
+              ant.state = "explore";
+              ant.trail = [];
+              ant.trailLastRecord = null;
+              ant.pathIndex = -1;
+              maybeExpandNest();
+            }
           }
         }
       });
