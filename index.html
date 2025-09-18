@@ -14,18 +14,18 @@
     canvas {
       display: block;
       margin: 0 auto;
-      background: linear-gradient(to bottom, #4d3a28 15%, #2a1f14 15%);
+      background: #111;
     }
     .hud {
       position: fixed;
       inset: 16px auto auto 16px;
       padding: 8px 12px;
       border-radius: 6px;
-      background: rgba(17, 17, 17, 0.65);
-      backdrop-filter: blur(6px);
+      background: rgba(17, 17, 17, 0.7);
       border: 1px solid rgba(255, 255, 255, 0.05);
       font-size: 13px;
       line-height: 1.4;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     }
     .hud strong {
       color: #ffe066;
@@ -63,6 +63,17 @@
       expansionCostGrowth: 6,
     });
 
+    const VISUAL = Object.freeze({
+      soilSpeckleDensity: 18000,
+      soilSpeckleMax: 520,
+      tunnelBaseWidth: 3.2,
+      tunnelWidthVariance: 1.6,
+      tunnelShadow: "rgba(11, 8, 6, 0.4)",
+      roomHighlight: "rgba(255, 210, 140, 0.45)",
+      queenAuraColor: "rgba(255, 105, 215, 0.18)",
+      entranceGlow: "rgba(160, 120, 80, 0.55)",
+    });
+
     let viewWidth = 0;
     let viewHeight = 0;
     let surfaceHeight = 0;
@@ -72,6 +83,7 @@
     const rooms = [];
     const pheromones = [];
     const foods = [];
+    const soilSpeckles = [];
 
     const colony = {
       foodBank: 0,
@@ -90,6 +102,24 @@
     function limitArraySize(array, maxLength) {
       if (array.length > maxLength) {
         array.splice(0, array.length - maxLength);
+      }
+    }
+
+    function generateSoilTexture() {
+      soilSpeckles.length = 0;
+      const target = Math.min(
+        VISUAL.soilSpeckleMax,
+        Math.floor((viewWidth * (viewHeight - surfaceHeight)) / VISUAL.soilSpeckleDensity)
+      );
+      for (let i = 0; i < target; i++) {
+        soilSpeckles.push({
+          x: Math.random() * viewWidth,
+          y: surfaceHeight + Math.random() * (viewHeight - surfaceHeight),
+          length: 4 + Math.random() * 12,
+          thickness: 0.6 + Math.random() * 0.8,
+          angle: (Math.random() - 0.5) * Math.PI,
+          alpha: 0.05 + Math.random() * 0.12,
+        });
       }
     }
 
@@ -143,14 +173,14 @@
     }
 
     function initializeNest() {
-      const nursery = { x: queen.x, y: queen.y + 32, radius: 28 };
-      const leftChamber = { x: queen.x - 92, y: queen.y + 86, radius: 22 };
-      const rightChamber = { x: queen.x + 92, y: queen.y + 86, radius: 22 };
+      const nursery = { x: queen.x, y: queen.y + 32, radius: 30, width: 6, type: "nursery" };
+      const leftChamber = { x: queen.x - 92, y: queen.y + 86, radius: 26, width: 5, type: "storage" };
+      const rightChamber = { x: queen.x + 92, y: queen.y + 86, radius: 24, width: 5, type: "storage" };
       rooms.push(nursery, leftChamber, rightChamber);
       tunnels.push(
-        { x1: queen.x, y1: queen.y, x2: nursery.x, y2: nursery.y },
-        { x1: nursery.x, y1: nursery.y, x2: leftChamber.x, y2: leftChamber.y },
-        { x1: nursery.x, y1: nursery.y, x2: rightChamber.x, y2: rightChamber.y },
+        { x1: queen.x, y1: queen.y, x2: nursery.x, y2: nursery.y, width: 5.5 },
+        { x1: nursery.x, y1: nursery.y, x2: leftChamber.x, y2: leftChamber.y, width: 4.4 },
+        { x1: nursery.x, y1: nursery.y, x2: rightChamber.x, y2: rightChamber.y, width: 4.4 },
       );
     }
 
@@ -159,15 +189,17 @@
       colony.expansionProgress -= colony.nextExpansionCost;
       colony.nextExpansionCost += CONFIG.expansionCostGrowth;
 
-      const angle = Math.PI * (0.35 + Math.random() * 0.3) + (rooms.length % 2 === 0 ? 0 : Math.PI / 6);
+      const anchor = rooms[0];
+      const angle = Math.PI * (0.4 + Math.random() * 0.26) * (Math.random() < 0.5 ? 1 : -1);
       const distance = 120 + rooms.length * 18;
-      const direction = Math.random() < 0.5 ? -1 : 1;
-      const x = rooms[0].x + Math.cos(angle) * distance * direction;
-      const y = rooms[0].y + Math.sin(angle) * (distance * 0.9);
-      const radius = 18 + Math.random() * 9;
-      const newRoom = { x, y, radius };
+      const x = anchor.x + Math.cos(angle) * distance;
+      const y = anchor.y + Math.sin(angle) * (distance * 0.9);
+      const radius = 18 + Math.random() * 18;
+      const width = VISUAL.tunnelBaseWidth + Math.random() * VISUAL.tunnelWidthVariance;
+      const types = ["nursery", "storage", "larvae", "granary"];
+      const newRoom = { x, y, radius, width: width + 1.5, type: types[Math.floor(Math.random() * types.length)] };
       rooms.push(newRoom);
-      tunnels.push({ x1: rooms[0].x, y1: rooms[0].y, x2: newRoom.x, y2: newRoom.y });
+      tunnels.push({ x1: anchor.x, y1: anchor.y, x2: newRoom.x, y2: newRoom.y, width });
       limitArraySize(tunnels, CONFIG.maxTunnels);
     }
 
@@ -183,10 +215,10 @@
     }
 
     function updateAnts() {
-      const minX = 4;
-      const maxX = Math.max(minX, viewWidth - 4);
-      const minY = surfaceHeight + 12;
-      const maxY = Math.max(minY, viewHeight - 12);
+      const minX = 6;
+      const maxX = Math.max(minX, viewWidth - 6);
+      const minY = surfaceHeight + 14;
+      const maxY = Math.max(minY, viewHeight - 14);
 
       ants.forEach(ant => {
         if (ant.state === "explore") {
@@ -204,7 +236,7 @@
           }
           if (best) {
             ant.angle = Math.atan2(best.y - ant.y, best.x - ant.x);
-            ant.angle += (Math.random() - 0.5) * (CONFIG.exploreTurnRate * 0.3);
+            ant.angle += (Math.random() - 0.5) * (CONFIG.exploreTurnRate * 0.25);
           } else {
             ant.angle += (Math.random() - 0.5) * CONFIG.exploreTurnRate;
           }
@@ -217,14 +249,16 @@
           if (ant.x > maxX) ant.x = maxX;
           if (ant.y > maxY) ant.y = maxY;
 
-          if (Math.random() < 0.0025) {
-            const length = 10 + Math.random() * 14;
-            const angle = ant.angle + (Math.random() - 0.5) * 0.6;
+          if (Math.random() < 0.002) {
+            const length = 12 + Math.random() * 18;
+            const angle = ant.angle + (Math.random() - 0.5) * 0.5;
+            const width = VISUAL.tunnelBaseWidth + Math.random() * VISUAL.tunnelWidthVariance;
             tunnels.push({
               x1: ant.x,
               y1: ant.y,
               x2: ant.x + Math.cos(angle) * length,
               y2: ant.y + Math.sin(angle) * length,
+              width,
             });
             limitArraySize(tunnels, CONFIG.maxTunnels);
           }
@@ -233,7 +267,7 @@
             const f = foods[i];
             if (f.amount <= 0) continue;
             const dist = Math.hypot(f.x - ant.x, f.y - ant.y);
-            if (dist < f.radius + 2) {
+            if (dist < f.radius + 3) {
               ant.carrying = true;
               ant.cargo = 1;
               ant.state = "return";
@@ -256,7 +290,7 @@
           }
 
           const dist = Math.hypot(dx, dy);
-          if (dist < 10) {
+          if (dist < 12) {
             ant.carrying = false;
             colony.foodBank += ant.cargo;
             colony.expansionProgress += ant.cargo;
@@ -268,56 +302,150 @@
       });
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, viewWidth, viewHeight);
-
-      ctx.fillStyle = "#4d3a28";
+    function drawSoil() {
+      const surfaceGradient = ctx.createLinearGradient(0, 0, 0, surfaceHeight);
+      surfaceGradient.addColorStop(0, "#4f3b2a");
+      surfaceGradient.addColorStop(1, "#3d2c1f");
+      ctx.fillStyle = surfaceGradient;
       ctx.fillRect(0, 0, viewWidth, surfaceHeight);
 
-      ctx.fillStyle = "#2a1f14";
+      const undergroundGradient = ctx.createLinearGradient(0, surfaceHeight, 0, viewHeight);
+      undergroundGradient.addColorStop(0, "#2b1e15");
+      undergroundGradient.addColorStop(0.35, "#22170f");
+      undergroundGradient.addColorStop(1, "#1a120b");
+      ctx.fillStyle = undergroundGradient;
       ctx.fillRect(0, surfaceHeight, viewWidth, viewHeight - surfaceHeight);
 
-      ctx.strokeStyle = "#3b2f1c";
-      ctx.lineWidth = 2;
+      ctx.save();
+      ctx.lineWidth = 1;
+      ctx.lineCap = "round";
+      soilSpeckles.forEach(s => {
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.angle);
+        ctx.globalAlpha = s.alpha;
+        ctx.strokeStyle = "#170f09";
+        ctx.beginPath();
+        ctx.moveTo(-s.length / 2, 0);
+        ctx.lineTo(s.length / 2, 0);
+        ctx.lineWidth = s.thickness;
+        ctx.stroke();
+        ctx.restore();
+      });
+      ctx.restore();
+    }
+
+    function drawEntrance() {
+      const entranceY = surfaceHeight - 6;
+      const gradient = ctx.createRadialGradient(queen.x, entranceY, 0, queen.x, entranceY, 24);
+      gradient.addColorStop(0, VISUAL.entranceGlow);
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(queen.x, entranceY, 24, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#20160f";
+      ctx.beginPath();
+      ctx.arc(queen.x, surfaceHeight, 12, Math.PI, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    function drawTunnels() {
+      ctx.save();
+      ctx.strokeStyle = "#3b2a1d";
+      ctx.lineCap = "round";
       tunnels.forEach(t => {
         ctx.beginPath();
         ctx.moveTo(t.x1, t.y1);
         ctx.lineTo(t.x2, t.y2);
+        ctx.lineWidth = t.width;
+        ctx.shadowColor = VISUAL.tunnelShadow;
+        ctx.shadowBlur = 6;
         ctx.stroke();
       });
+      ctx.restore();
+    }
 
+    function drawRooms() {
       rooms.forEach(r => {
+        const gradient = ctx.createRadialGradient(r.x, r.y, r.radius * 0.15, r.x, r.y, r.radius);
+        gradient.addColorStop(0, VISUAL.roomHighlight);
+        gradient.addColorStop(0.7, "rgba(68, 51, 36, 0.95)");
+        gradient.addColorStop(1, "rgba(40, 29, 21, 1)");
+        ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "#3a2a1c";
         ctx.fill();
-      });
 
+        ctx.strokeStyle = "rgba(18, 12, 8, 0.6)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+    }
+
+    function drawPheromones() {
       pheromones.forEach(p => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(0, 200, 220, ${p.strength})`;
         ctx.fill();
       });
+    }
 
+    function drawFoods() {
       foods.forEach(f => {
+        const amountRatio = Math.max(0.2, f.amount / CONFIG.foodClusterMax);
         ctx.beginPath();
-        ctx.arc(f.x, f.y, Math.max(2, f.radius * (f.amount / CONFIG.foodClusterMax + 0.2)), 0, Math.PI * 2);
-        ctx.fillStyle = "#0f0";
+        ctx.arc(f.x, f.y, Math.max(2.4, f.radius * amountRatio), 0, Math.PI * 2);
+        ctx.fillStyle = "#24ff41";
+        ctx.shadowColor = "rgba(36, 255, 65, 0.4)";
+        ctx.shadowBlur = 8;
         ctx.fill();
+        ctx.shadowBlur = 0;
       });
+    }
 
+    function drawQueenAura() {
+      const gradient = ctx.createRadialGradient(queen.x, queen.y, 0, queen.x, queen.y, 48);
+      gradient.addColorStop(0, VISUAL.queenAuraColor);
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(queen.x, queen.y, 7, 0, Math.PI * 2);
-      ctx.fillStyle = "#f0c";
+      ctx.arc(queen.x, queen.y, 48, 0, Math.PI * 2);
       ctx.fill();
+    }
 
+    function drawQueen() {
+      ctx.beginPath();
+      ctx.arc(queen.x, queen.y, 7.4, 0, Math.PI * 2);
+      ctx.fillStyle = "#ff4dd2";
+      ctx.shadowColor = "rgba(255, 77, 210, 0.6)";
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    function drawAnts() {
       ants.forEach(ant => {
         ctx.beginPath();
-        ctx.arc(ant.x, ant.y, ant.carrying ? 2.6 : 2.2, 0, Math.PI * 2);
-        ctx.fillStyle = ant.carrying ? "#ff0" : "#fff";
+        ctx.arc(ant.x, ant.y, ant.carrying ? 2.8 : 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = ant.carrying ? "#ffe066" : "#f5f5f5";
         ctx.fill();
       });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, viewWidth, viewHeight);
+      drawSoil();
+      drawEntrance();
+      drawTunnels();
+      drawRooms();
+      drawPheromones();
+      drawFoods();
+      drawQueenAura();
+      drawQueen();
+      drawAnts();
     }
 
     function updateHud() {
@@ -346,11 +474,13 @@
       if (initial) {
         queen.x = viewWidth / 2;
         queen.y = surfaceHeight + 60;
+        generateSoilTexture();
         return;
       }
 
       const scaleX = viewWidth / prevWidth;
       const scaleY = viewHeight / prevHeight;
+      const scaleAvg = (scaleX + scaleY) * 0.5;
 
       ants.forEach(ant => {
         ant.x *= scaleX;
@@ -361,11 +491,13 @@
         t.y1 *= scaleY;
         t.x2 *= scaleX;
         t.y2 *= scaleY;
+        t.width *= scaleAvg;
       });
       rooms.forEach(r => {
         r.x *= scaleX;
         r.y *= scaleY;
-        r.radius *= (scaleX + scaleY) * 0.5;
+        r.radius *= scaleAvg;
+        r.width *= scaleAvg;
       });
       pheromones.forEach(p => {
         p.x *= scaleX;
@@ -374,11 +506,12 @@
       foods.forEach(f => {
         f.x *= scaleX;
         f.y *= scaleY;
-        f.radius *= (scaleX + scaleY) * 0.5;
+        f.radius *= scaleAvg;
       });
 
       queen.x *= scaleX;
       queen.y = surfaceHeight + 60;
+      generateSoilTexture();
     }
 
     function animate() {
@@ -400,6 +533,8 @@
       for (let i = 0; i < 2; i++) {
         spawnFoodSource();
       }
+      draw();
+      updateHud();
       animate();
     }
 
